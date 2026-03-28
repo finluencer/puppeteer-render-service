@@ -1,7 +1,7 @@
-const ImageCache = require('../src/ImageCache');
+import { ImageCache } from '../src/ImageCache';
 
 describe('ImageCache', () => {
-  let cache;
+  let cache: ImageCache;
 
   beforeEach(() => {
     cache = new ImageCache({ ttl: 5000, maxEntries: 10, maxSizeBytes: 1024 * 1024 });

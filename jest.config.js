@@ -1,9 +1,12 @@
 module.exports = {
   testEnvironment: 'node',
-  testMatch: ['**/test/**/*.test.js'],
+  testMatch: ['**/test/**/*.test.ts'],
+  transform: {
+    '^.+\\.tsx?$': 'ts-jest',
+  },
   collectCoverageFrom: [
-    'src/**/*.js',
-    '!src/index.js',
+    'src/**/*.ts',
+    '!src/index.ts',
   ],
   coverageDirectory: 'coverage',
   coverageThresholds: {

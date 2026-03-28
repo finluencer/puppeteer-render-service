@@ -1,5 +1,5 @@
-const BrowserPool = require('../src/BrowserPool');
-const { BrowserPoolError } = require('../src/errors');
+import { BrowserPool } from '../src/BrowserPool';
+import { BrowserPoolError } from '../src/errors';
 
 // Mock browser object
 function createMockBrowser(connected = true) {
@@ -22,8 +22,8 @@ const silentLogger = {
 };
 
 describe('BrowserPool', () => {
-  let pool;
-  let mockLaunch;
+  let pool: BrowserPool;
+  let mockLaunch: jest.Mock;
 
   beforeEach(() => {
     mockLaunch = jest.fn(() => Promise.resolve(createMockBrowser()));
@@ -195,7 +195,7 @@ describe('BrowserPool', () => {
   describe('destroy', () => {
     it('should close all browsers and reset state', async () => {
       await pool.initialize();
-      const handle = await pool.acquire();
+      await pool.acquire();
 
       await pool.destroy();
       expect(pool.pool.length).toBe(0);

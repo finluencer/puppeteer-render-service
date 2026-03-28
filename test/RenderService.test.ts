@@ -1,5 +1,5 @@
-const RenderService = require('../src/RenderService');
-const { ValidationError } = require('../src/errors');
+import { RenderService } from '../src/RenderService';
+import { ValidationError } from '../src/errors';
 
 // Mocks
 function createMockPage() {
@@ -39,8 +39,8 @@ function createMockPuppeteer() {
 const silentLogger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
 
 describe('RenderService', () => {
-  let service;
-  let mockPuppeteer;
+  let service: RenderService;
+  let mockPuppeteer: ReturnType<typeof createMockPuppeteer>;
 
   beforeEach(() => {
     mockPuppeteer = createMockPuppeteer();
@@ -59,7 +59,7 @@ describe('RenderService', () => {
 
   describe('constructor', () => {
     it('should throw if puppeteer not provided', () => {
-      expect(() => new RenderService({})).toThrow('puppeteer is required');
+      expect(() => new RenderService({} as never)).toThrow('puppeteer is required');
     });
 
     it('should initialize with defaults', () => {
@@ -68,7 +68,7 @@ describe('RenderService', () => {
     });
 
     it('should accept custom templates', () => {
-      const footer = (meta) => `<div>${meta.name}</div>`;
+      const footer = (meta: Record<string, unknown>) => `<div>${meta['name']}</div>`;
       const svc = new RenderService({
         puppeteer: mockPuppeteer,
         footerTemplate: footer,
@@ -95,8 +95,8 @@ describe('RenderService', () => {
 
     it('should throw ValidationError for empty HTML', async () => {
       await expect(service.render('')).rejects.toThrow(ValidationError);
-      await expect(service.render(null)).rejects.toThrow(ValidationError);
-      await expect(service.render(123)).rejects.toThrow(ValidationError);
+      await expect(service.render(null as unknown as string)).rejects.toThrow(ValidationError);
+      await expect(service.render(123 as unknown as string)).rejects.toThrow(ValidationError);
     });
 
     it('should throw after destroy', async () => {
@@ -111,7 +111,6 @@ describe('RenderService', () => {
     });
 
     it('should increment error metrics on failure', async () => {
-      // Make page.pdf throw
       const badBrowser = createMockBrowser();
       const badPage = createMockPage();
       badPage.pdf = jest.fn(() => Promise.reject(new Error('pdf failed')));

@@ -1,8 +1,53 @@
-const { BrowserPoolError } = require('./errors');
-const DEFAULTS = require('./defaults');
+import { BrowserPoolError } from './errors';
+import DEFAULTS from './defaults';
+import type { PoolDefaults } from './defaults';
 
-class BrowserPool {
-  constructor(launchFn, options = {}) {
+interface BrowserLike {
+  isConnected(): boolean;
+  close(): Promise<void>;
+}
+
+interface PoolItem {
+  browser: BrowserLike;
+  inUse: boolean;
+  created: number;
+  useCount: number;
+}
+
+export interface BrowserHandle {
+  browser: BrowserLike;
+  release(): void;
+}
+
+interface WaitQueueItem {
+  resolve(handle: BrowserHandle): void;
+}
+
+interface Logger {
+  info?(...args: unknown[]): void;
+  warn?(...args: unknown[]): void;
+  error?(...args: unknown[]): void;
+}
+
+export interface BrowserPoolOptions extends Partial<PoolDefaults> {
+  logger?: Logger;
+}
+
+export class BrowserPool {
+  launchFn: () => Promise<BrowserLike>;
+  minSize: number;
+  maxSize: number;
+  acquireTimeout: number;
+  maxUsesPerBrowser: number;
+  healthCheckInterval: number;
+  pool: PoolItem[];
+  waitQueue: WaitQueueItem[];
+  isInitialized: boolean;
+  isShuttingDown: boolean;
+  healthCheckTimer: ReturnType<typeof setInterval> | null;
+  logger: Logger;
+
+  constructor(launchFn: () => Promise<BrowserLike>, options: BrowserPoolOptions = {}) {
     const config = { ...DEFAULTS.pool, ...options };
     this.launchFn = launchFn;
     this.minSize = config.min;
@@ -19,7 +64,7 @@ class BrowserPool {
     this.logger = options.logger || console;
   }
 
-  async initialize() {
+  async initialize(): Promise<void> {
     if (this.isInitialized) return;
 
     for (let i = 0; i < this.minSize; i++) {
@@ -33,7 +78,7 @@ class BrowserPool {
         });
       } catch (error) {
         if (this.logger.warn) {
-          this.logger.warn(`[BrowserPool] Failed to pre-warm browser ${i + 1}:`, error.message);
+          this.logger.warn(`[BrowserPool] Failed to pre-warm browser ${i + 1}:`, (error as Error).message);
         }
       }
     }
@@ -42,7 +87,7 @@ class BrowserPool {
     this.isInitialized = true;
   }
 
-  async acquire() {
+  async acquire(): Promise<BrowserHandle> {
     if (this.isShuttingDown) {
       throw new BrowserPoolError('Pool is shutting down');
     }
@@ -64,23 +109,23 @@ class BrowserPool {
     if (this.pool.length < this.maxSize) {
       try {
         const browser = await this.launchFn();
-        const item = { browser, inUse: true, created: Date.now(), useCount: 1 };
+        const item: PoolItem = { browser, inUse: true, created: Date.now(), useCount: 1 };
         this.pool.push(item);
         return this._wrapPoolItem(item);
       } catch (error) {
-        throw new BrowserPoolError(`Failed to launch browser: ${error.message}`);
+        throw new BrowserPoolError(`Failed to launch browser: ${(error as Error).message}`);
       }
     }
 
     // Wait for an available browser
-    return new Promise((resolve, reject) => {
+    return new Promise<BrowserHandle>((resolve, reject) => {
       const timeout = setTimeout(() => {
         const idx = this.waitQueue.findIndex((w) => w.resolve === wrappedResolve);
         if (idx !== -1) this.waitQueue.splice(idx, 1);
         reject(new BrowserPoolError(`Acquire timeout after ${this.acquireTimeout}ms - all browsers busy`));
       }, this.acquireTimeout);
 
-      const wrappedResolve = (item) => {
+      const wrappedResolve = (item: BrowserHandle) => {
         clearTimeout(timeout);
         resolve(item);
       };
@@ -89,7 +134,7 @@ class BrowserPool {
     });
   }
 
-  release(item) {
+  release(item: PoolItem): void {
     if (!item) return;
     item.inUse = false;
 
@@ -101,27 +146,27 @@ class BrowserPool {
 
     // Serve waiting consumers
     if (this.waitQueue.length > 0) {
-      const waiter = this.waitQueue.shift();
+      const waiter = this.waitQueue.shift()!;
       item.inUse = true;
       item.useCount++;
       waiter.resolve(this._wrapPoolItem(item));
     }
   }
 
-  _wrapPoolItem(item) {
+  _wrapPoolItem(item: PoolItem): BrowserHandle {
     return {
       browser: item.browser,
       release: () => this.release(item),
     };
   }
 
-  async _recycleBrowser(item) {
+  async _recycleBrowser(item: PoolItem): Promise<void> {
     const idx = this.pool.indexOf(item);
     if (idx !== -1) this.pool.splice(idx, 1);
 
     try {
       if (item.browser.isConnected()) await item.browser.close();
-    } catch (e) {
+    } catch {
       // ignore close errors
     }
 
@@ -131,26 +176,26 @@ class BrowserPool {
         this.pool.push({ browser, inUse: false, created: Date.now(), useCount: 0 });
         this._drainWaitQueue();
       })
-      .catch((err) => {
+      .catch((err: Error) => {
         if (this.logger.warn) {
           this.logger.warn('[BrowserPool] Recycle launch failed:', err.message);
         }
       });
   }
 
-  _drainWaitQueue() {
+  _drainWaitQueue(): void {
     while (this.waitQueue.length > 0) {
       const availableItem = this.pool.find((p) => !p.inUse && p.browser.isConnected());
       if (!availableItem) break;
 
-      const waiter = this.waitQueue.shift();
+      const waiter = this.waitQueue.shift()!;
       availableItem.inUse = true;
       availableItem.useCount++;
       waiter.resolve(this._wrapPoolItem(availableItem));
     }
   }
 
-  async healthCheck() {
+  async healthCheck(): Promise<void> {
     // Remove disconnected browsers
     this.pool = this.pool.filter((item) => item.browser.isConnected());
 
@@ -163,7 +208,7 @@ class BrowserPool {
         this._drainWaitQueue();
       } catch (error) {
         if (this.logger.warn) {
-          this.logger.warn('[BrowserPool] Health check launch failed:', error.message);
+          this.logger.warn('[BrowserPool] Health check launch failed:', (error as Error).message);
         }
       }
     }
@@ -178,7 +223,7 @@ class BrowserPool {
     };
   }
 
-  async destroy() {
+  async destroy(): Promise<void> {
     this.isShuttingDown = true;
 
     if (this.healthCheckTimer) {
@@ -191,7 +236,7 @@ class BrowserPool {
     const closePromises = this.pool.map(async (item) => {
       try {
         if (item.browser.isConnected()) await item.browser.close();
-      } catch (e) {
+      } catch {
         // ignore
       }
     });
@@ -201,5 +246,3 @@ class BrowserPool {
     this.isInitialized = false;
   }
 }
-
-module.exports = BrowserPool;

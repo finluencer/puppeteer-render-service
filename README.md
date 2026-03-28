@@ -1,6 +1,6 @@
 # puppeteer-render-service
 
-A high-performance HTML rendering library built on Puppeteer with browser pooling, caching, and resilience features.
+A high-performance HTML rendering library built on Puppeteer with browser pooling, caching, and resilience features. Written in TypeScript with full type definitions included.
 
 ---
 
@@ -19,6 +19,21 @@ npm install puppeteer
 ---
 
 ## Quick Start
+
+**TypeScript**
+
+```ts
+import puppeteer from 'puppeteer';
+import { createRenderService } from 'puppeteer-render-service';
+
+const renderer = createRenderService({ puppeteer });
+
+const pdfBuffer = await renderer.pdf('<h1>Hello World</h1>');
+const pngBuffer = await renderer.png('<h1>Hello World</h1>');
+await renderer.destroy();
+```
+
+**CommonJS**
 
 ```js
 const puppeteer = require('puppeteer');
@@ -62,7 +77,7 @@ Creates and returns a new `RenderService` instance.
 | `headerTemplate` | function | `null` | `(metadata) => htmlString` for PDF header |
 | `footerTemplate` | function | `null` | `(metadata) => htmlString` for PDF footer |
 | `imagePreprocessor` | object | `null` | Enable image preprocessing in HTML |
-| `logger` | object | `console` | Custom logger (`{ log, warn, error }`) |
+| `logger` | object | `console` | Custom logger (`{ warn, error }`) |
 
 ---
 
@@ -72,7 +87,7 @@ Creates and returns a new `RenderService` instance.
 
 Renders HTML and returns a `Buffer`.
 
-```js
+```ts
 const buffer = await renderer.render('<h1>Hello</h1>', { type: 'pdf' });
 ```
 
@@ -97,7 +112,7 @@ const buffer = await renderer.render('<h1>Hello</h1>', { type: 'pdf' });
 
 All convenience methods accept the same `options` as `render()` (minus `type`).
 
-```js
+```ts
 await renderer.pdf(html, options);
 await renderer.png(html, options);
 await renderer.jpeg(html, options);
@@ -108,7 +123,7 @@ await renderer.webp(html, options);
 
 ## Stats
 
-```js
+```ts
 const stats = renderer.getStats();
 // {
 //   renders: { totalRenders, totalTime, errors, byType },
@@ -122,7 +137,7 @@ const stats = renderer.getStats();
 
 ## Cleanup
 
-```js
+```ts
 await renderer.destroy();
 ```
 
@@ -132,7 +147,7 @@ await renderer.destroy();
 
 `RenderService` extends `EventEmitter`.
 
-```js
+```ts
 renderer.on('render', ({ type, duration, bufferSize }) => {
   console.log(`Rendered ${type} in ${duration}ms`);
 });
@@ -158,17 +173,17 @@ renderer.on('destroy', () => {
 
 ### PDF with Header and Footer
 
-```js
+```ts
 const renderer = createRenderService({
   puppeteer,
   headerTemplate: (meta) => `
     <div style="font-size:10px;width:100%;text-align:right;padding-right:20px;">
-      ${meta.title}
+      ${meta['title']}
     </div>
   `,
   footerTemplate: (meta) => `
     <div style="font-size:10px;width:100%;text-align:center;">
-      ${meta.companyName} — Page <span class="pageNumber"></span> of <span class="totalPages"></span>
+      ${meta['companyName']} — Page <span class="pageNumber"></span> of <span class="totalPages"></span>
     </div>
   `,
   pdf: {
@@ -183,7 +198,7 @@ const buffer = await renderer.pdf('<h1>Invoice</h1>', {
 
 ### Screenshot a Specific Element
 
-```js
+```ts
 const buffer = await renderer.png(html, {
   image: { selector: '#chart' },
 });
@@ -191,7 +206,7 @@ const buffer = await renderer.png(html, {
 
 ### Clip a Region
 
-```js
+```ts
 const buffer = await renderer.png(html, {
   image: { clip: { x: 0, y: 0, width: 800, height: 400 } },
 });
@@ -199,19 +214,19 @@ const buffer = await renderer.png(html, {
 
 ### Block External Requests
 
-```js
+```ts
 const buffer = await renderer.render(html, {
   type: 'pdf',
-  requestFilter: (req) => req.url().startsWith('https://external.com') ? 'abort' : 'continue',
+  requestFilter: (req) => req.resourceType() === 'image' ? 'abort' : 'continue',
 });
 ```
 
 ### Express Integration
 
-```js
-const express = require('express');
-const puppeteer = require('puppeteer');
-const { createRenderService } = require('puppeteer-render-service');
+```ts
+import express from 'express';
+import puppeteer from 'puppeteer';
+import { createRenderService } from 'puppeteer-render-service';
 
 const app = express();
 app.use(express.json());
@@ -232,7 +247,7 @@ app.listen(3000);
 
 ## Default Configuration
 
-```js
+```ts
 {
   pool: {
     min: 1,
@@ -298,8 +313,8 @@ app.listen(3000);
 | `BrowserPoolError` | `BROWSER_POOL_ERROR` | Could not acquire browser from pool |
 | `CircuitBreakerOpenError` | `CIRCUIT_BREAKER_OPEN` | Too many consecutive failures |
 
-```js
-const { ValidationError, RenderTimeoutError } = require('puppeteer-render-service');
+```ts
+import { ValidationError, RenderTimeoutError } from 'puppeteer-render-service';
 
 try {
   await renderer.render('');
@@ -316,10 +331,40 @@ try {
 
 ## Exports
 
-```js
-const {
+```ts
+import {
   createRenderService,  // factory function (recommended)
   RenderService,        // class
+  BrowserPool,
+  ImageCache,
+  ImagePreprocessor,
+  CircuitBreaker,
+  DEFAULTS,
+  ValidationError,
+  RenderTimeoutError,
+  BrowserPoolError,
+  CircuitBreakerOpenError,
+} from 'puppeteer-render-service';
+
+// Type imports
+import type {
+  RenderServiceOptions,
+  RenderOptions,
+  BrowserPoolOptions,
+  ImagePreprocessorOptions,
+  CircuitBreakerOptions,
+  CircuitBreakerState,
+  CacheStats,
+  ViewportConfig,
+} from 'puppeteer-render-service';
+```
+
+CommonJS:
+
+```js
+const {
+  createRenderService,
+  RenderService,
   BrowserPool,
   ImageCache,
   ImagePreprocessor,
@@ -334,12 +379,13 @@ const {
 
 ---
 
-## Testing
+## Development
 
 ```bash
-npm test
-npm run test:watch
-npm run lint
+npm run build       # compile TypeScript → dist/
+npm test            # run tests with coverage
+npm run test:watch  # watch mode
+npm run lint        # ESLint
 ```
 
 Tested on Node.js 16, 18, 20, 22.
@@ -353,5 +399,3 @@ MIT — see [LICENSE](LICENSE)
 ---
 
 Made by **Finluencer**
-
-

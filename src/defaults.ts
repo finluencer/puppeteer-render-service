@@ -1,4 +1,92 @@
-const DEFAULTS = {
+export interface ViewportConfig {
+  width: number;
+  height: number;
+  deviceScaleFactor: number;
+}
+
+export interface MarginConfig {
+  top: string;
+  right: string;
+  bottom: string;
+  left: string;
+}
+
+export interface PoolDefaults {
+  min: number;
+  max: number;
+  acquireTimeout: number;
+  maxUsesPerBrowser: number;
+  healthCheckInterval: number;
+}
+
+export interface CacheDefaults {
+  enabled: boolean;
+  maxSizeBytes: number;
+  maxEntries: number;
+  ttl: number;
+  evictionPercent: number;
+}
+
+export interface CircuitBreakerDefaults {
+  enabled: boolean;
+  maxFailures: number;
+  resetTimeout: number;
+}
+
+export interface BrowserDefaults {
+  headless: boolean;
+  timeout: number;
+  args: string[];
+}
+
+export interface PdfDefaults {
+  format: string;
+  printBackground: boolean;
+  preferCSSPageSize: boolean;
+  displayHeaderFooter: boolean;
+  landscape: boolean;
+  scale: number;
+  timeout: number;
+  margin: MarginConfig;
+}
+
+export interface ImageDefaults {
+  type: string;
+  quality: number;
+  fullPage: boolean;
+  omitBackground: boolean;
+  timeout: number;
+  viewport: ViewportConfig;
+}
+
+export interface PageDefaults {
+  javascript: boolean;
+  navigationTimeout: number;
+  defaultTimeout: number;
+  retries: number;
+  retryDelay: number;
+  viewport: ViewportConfig;
+}
+
+export interface OutputTypes {
+  pdf: 'pdf';
+  png: 'png';
+  jpeg: 'jpeg';
+  webp: 'webp';
+}
+
+export interface Defaults {
+  pool: PoolDefaults;
+  cache: CacheDefaults;
+  circuitBreaker: CircuitBreakerDefaults;
+  browser: BrowserDefaults;
+  pdf: PdfDefaults;
+  image: ImageDefaults;
+  page: PageDefaults;
+  outputTypes: OutputTypes;
+}
+
+const DEFAULTS: Defaults = {
   pool: {
     min: 1,
     max: 3,
@@ -81,4 +169,4 @@ const DEFAULTS = {
   },
 };
 
-module.exports = DEFAULTS;
+export default DEFAULTS;

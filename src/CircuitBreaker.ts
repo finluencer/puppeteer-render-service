@@ -1,8 +1,29 @@
-const { CircuitBreakerOpenError } = require('./errors');
-const DEFAULTS = require('./defaults');
+import { CircuitBreakerOpenError } from './errors';
+import DEFAULTS from './defaults';
 
-class CircuitBreaker {
-  constructor(options = {}) {
+export interface CircuitBreakerOptions {
+  enabled?: boolean;
+  maxFailures?: number;
+  resetTimeout?: number;
+}
+
+export interface CircuitBreakerState {
+  isOpen: boolean;
+  failures: number;
+  successCount: number;
+  lastFailureTime: number | null;
+}
+
+export class CircuitBreaker {
+  enabled: boolean;
+  maxFailures: number;
+  resetTimeout: number;
+  failures: number;
+  isOpen: boolean;
+  lastFailureTime: number | null;
+  successCount: number;
+
+  constructor(options: CircuitBreakerOptions = {}) {
     const config = { ...DEFAULTS.circuitBreaker, ...options };
     this.enabled = config.enabled;
     this.maxFailures = config.maxFailures;
@@ -13,10 +34,10 @@ class CircuitBreaker {
     this.successCount = 0;
   }
 
-  get isBroken() {
+  get isBroken(): boolean {
     if (!this.enabled || !this.isOpen) return false;
 
-    const elapsed = Date.now() - this.lastFailureTime;
+    const elapsed = Date.now() - this.lastFailureTime!;
     if (elapsed > this.resetTimeout) {
       this.reset();
       return false;
@@ -25,14 +46,14 @@ class CircuitBreaker {
     return true;
   }
 
-  recordSuccess() {
+  recordSuccess(): void {
     this.successCount++;
     if (this.failures > 0) {
       this.failures = Math.max(0, this.failures - 1);
     }
   }
 
-  recordFailure() {
+  recordFailure(): void {
     this.failures++;
     this.lastFailureTime = Date.now();
 
@@ -41,7 +62,7 @@ class CircuitBreaker {
     }
   }
 
-  async execute(fn, fallback) {
+  async execute<T>(fn: () => Promise<T>, fallback?: () => T | Promise<T>): Promise<T> {
     if (this.isBroken) {
       if (fallback) return fallback();
       throw new CircuitBreakerOpenError(
@@ -59,13 +80,13 @@ class CircuitBreaker {
     }
   }
 
-  reset() {
+  reset(): void {
     this.failures = 0;
     this.isOpen = false;
     this.lastFailureTime = null;
   }
 
-  getState() {
+  getState(): CircuitBreakerState {
     return {
       isOpen: this.isOpen,
       failures: this.failures,
@@ -74,5 +95,3 @@ class CircuitBreaker {
     };
   }
 }
-
-module.exports = CircuitBreaker;

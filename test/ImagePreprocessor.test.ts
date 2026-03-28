@@ -1,4 +1,4 @@
-const ImagePreprocessor = require('../src/ImagePreprocessor');
+import { ImagePreprocessor } from '../src/ImagePreprocessor';
 
 const silentLogger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
 
@@ -42,16 +42,17 @@ describe('ImagePreprocessor', () => {
     });
 
     it('should filter URLs through shouldProcess', async () => {
-      const mockFetch = jest.fn(() =>
+      const mockFetch = jest.fn((_url: string, _init?: unknown) =>
         Promise.resolve({
           ok: true,
+          status: 200,
           arrayBuffer: () => Promise.resolve(new ArrayBuffer(10)),
           headers: { get: () => 'image/png' },
         })
       );
 
       const preprocessor = new ImagePreprocessor({
-        fetchFn: mockFetch,
+        fetchFn: mockFetch as never,
         shouldProcess: (url) => url.includes('allowed'),
         logger: silentLogger,
       });
@@ -70,13 +71,14 @@ describe('ImagePreprocessor', () => {
       const mockFetch = jest.fn(() =>
         Promise.resolve({
           ok: true,
+          status: 200,
           arrayBuffer: () => Promise.resolve(new ArrayBuffer(10)),
           headers: { get: () => 'image/png' },
         })
       );
 
       const preprocessor = new ImagePreprocessor({
-        fetchFn: mockFetch,
+        fetchFn: mockFetch as never,
         logger: silentLogger,
       });
 

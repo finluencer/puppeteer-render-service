@@ -1,8 +1,48 @@
-const CircuitBreaker = require('./CircuitBreaker');
-const ImageCache = require('./ImageCache');
+import { CircuitBreaker } from './CircuitBreaker';
+import { ImageCache } from './ImageCache';
+import type { CircuitBreakerOptions } from './CircuitBreaker';
+import type { CacheDefaults } from './defaults';
 
-class ImagePreprocessor {
-  constructor(options = {}) {
+interface FetchResponse {
+  ok: boolean;
+  status: number;
+  arrayBuffer(): Promise<ArrayBuffer>;
+  headers: { get(name: string): string | null };
+}
+
+type FetchFn = (
+  url: string,
+  init?: { signal?: AbortSignal; headers?: Record<string, string> }
+) => Promise<FetchResponse>;
+
+interface Logger {
+  info?(...args: unknown[]): void;
+  warn?(...args: unknown[]): void;
+  error?(...args: unknown[]): void;
+}
+
+export interface ImagePreprocessorOptions {
+  fetchFn?: FetchFn;
+  shouldProcess?: (url: string) => boolean;
+  downloadTimeout?: number;
+  maxRetries?: number;
+  batchSize?: number;
+  logger?: Logger;
+  cache?: Partial<CacheDefaults>;
+  circuitBreaker?: CircuitBreakerOptions;
+}
+
+export class ImagePreprocessor {
+  fetchFn: FetchFn | null;
+  shouldProcess: (url: string) => boolean;
+  downloadTimeout: number;
+  maxRetries: number;
+  batchSize: number;
+  logger: Logger;
+  cache: ImageCache;
+  circuitBreaker: CircuitBreaker;
+
+  constructor(options: ImagePreprocessorOptions = {}) {
     this.fetchFn = options.fetchFn || null;
     this.shouldProcess = options.shouldProcess || (() => true);
     this.downloadTimeout = options.downloadTimeout || 4000;
@@ -14,16 +54,17 @@ class ImagePreprocessor {
     this.circuitBreaker = new CircuitBreaker(options.circuitBreaker);
   }
 
-  async _getFetch() {
+  async _getFetch(): Promise<FetchFn> {
     if (this.fetchFn) return this.fetchFn;
 
     if (typeof globalThis.fetch === 'function') {
-      this.fetchFn = globalThis.fetch.bind(globalThis);
+      this.fetchFn = globalThis.fetch.bind(globalThis) as unknown as FetchFn;
       return this.fetchFn;
     }
 
     try {
-      const nodeFetch = require('node-fetch');
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const nodeFetch = require('node-fetch') as FetchFn;
       this.fetchFn = nodeFetch;
       return this.fetchFn;
     } catch {
@@ -33,7 +74,7 @@ class ImagePreprocessor {
     }
   }
 
-  async downloadAsBase64(url) {
+  async downloadAsBase64(url: string): Promise<string> {
     const fetch = await this._getFetch();
 
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
@@ -69,9 +110,11 @@ class ImagePreprocessor {
         await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
       }
     }
+
+    throw new Error('downloadAsBase64: exhausted retries');
   }
 
-  async processImage(url, namespace = 'default') {
+  async processImage(url: string, namespace = 'default'): Promise<string> {
     const cacheKey = ImageCache.generateKey(url, namespace);
 
     const cached = this.cache.get(cacheKey);
@@ -90,7 +133,7 @@ class ImagePreprocessor {
     }
   }
 
-  async processHtml(html, options = {}) {
+  async processHtml(html: string, options: { pattern?: string | RegExp; namespace?: string } = {}): Promise<string> {
     const { pattern, namespace = 'default' } = options;
 
     if (!pattern) return html;
@@ -106,7 +149,7 @@ class ImagePreprocessor {
     const processableUrls = urls.filter((url) => this.shouldProcess(url));
     if (processableUrls.length === 0) return html;
 
-    const results = new Map();
+    const results = new Map<string, string>();
 
     for (let i = 0; i < processableUrls.length; i += this.batchSize) {
       const batch = processableUrls.slice(i, i + this.batchSize);
@@ -139,14 +182,12 @@ class ImagePreprocessor {
     };
   }
 
-  reset() {
+  reset(): void {
     this.cache.clear();
     this.circuitBreaker.reset();
   }
 }
 
-function _escapeRegExp(string) {
+function _escapeRegExp(string: string): string {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
-
-module.exports = ImagePreprocessor;
