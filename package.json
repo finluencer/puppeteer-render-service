@@ -1,0 +1,46 @@
+{
+  "name": "puppeteer-render-service",
+  "version": "1.0.0",
+  "description": "High-performance HTML to PDF/Image renderer with browser pooling, caching, and circuit breaker",
+  "main": "src/index.js",
+  "types": "types/index.d.ts",
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "scripts": {
+    "test": "jest --coverage",
+    "test:watch": "jest --watch",
+    "lint": "eslint src/",
+    "prepublishOnly": "npm test && npm run lint"
+  },
+  "keywords": [
+    "pdf",
+    "html-to-pdf",
+    "html-to-image",
+    "puppeteer",
+    "screenshot",
+    "renderer",
+    "browser-pool",
+    "circuit-breaker"
+  ],
+  "author": "",
+  "license": "MIT",
+  "peerDependencies": {
+    "puppeteer": ">=19.0.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "eslint": "^8.56.0",
+    "puppeteer": "^24.10.1"
+  },
+  "files": [
+    "src/",
+    "types/",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": ""
+  }
+}

@@ -1,0 +1,21 @@
+# Tests
+tests/
+vitest.config.js
+coverage/
+
+# Dev config & editor
+.idea/
+.vscode/
+.claude/
+.env
+.env.*
+
+# Git
+.git/
+.gitignore
+
+# Misc
+node_modules/
+npm-debug.log*
+*.log
+instructions.txt

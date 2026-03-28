@@ -1,0 +1,8 @@
+# .claudeignore - Add sensitive files here
+.env
+.env.local
+.env.production
+*.pem
+*.key
+secrets/
+config/secrets.js
