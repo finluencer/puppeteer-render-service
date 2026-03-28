@@ -21,21 +21,21 @@ async function main() {
       image: { viewport: { width: 1200, height: 630 } },
     });
     fs.writeFileSync('output.png', pngBuffer);
-    console.log('🖼️  PNG saved to output.png');
+    console.log('PNG saved to output.png');
 
     // JPEG
     const jpegBuffer = await renderer.jpeg(html, {
       image: { quality: 90, viewport: { width: 1200, height: 630 } },
     });
     fs.writeFileSync('output.jpg', jpegBuffer);
-    console.log('🖼️  JPEG saved to output.jpg');
+    console.log('JPEG saved to output.jpg');
 
     // WebP
     const webpBuffer = await renderer.webp(html, {
       image: { quality: 85, viewport: { width: 1200, height: 630 } },
     });
     fs.writeFileSync('output.webp', webpBuffer);
-    console.log('🖼️  WebP saved to output.webp');
+    console.log('WebP saved to output.webp');
   } finally {
     await renderer.destroy();
   }

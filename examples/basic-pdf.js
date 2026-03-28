@@ -10,7 +10,7 @@ async function main() {
 
   // Listen for events
   renderer.on('render', (data) => {
-    console.log(`✅ Rendered ${data.type} in ${data.duration}ms (${data.bufferSize} bytes)`);
+    console.log(`Rendered ${data.type} in ${data.duration}ms (${data.bufferSize} bytes)`);
   });
 
   try {
@@ -23,13 +23,13 @@ async function main() {
     });
 
     fs.writeFileSync('output.pdf', pdfBuffer);
-    console.log('📄 PDF saved to output.pdf');
+    console.log('PDF saved to output.pdf');
 
     // Print stats
-    console.log('\n📊 Stats:', JSON.stringify(renderer.getStats(), null, 2));
+    console.log('\nStats:', JSON.stringify(renderer.getStats(), null, 2));
   } finally {
     await renderer.destroy();
-    console.log('👋 Service destroyed');
+    console.log('Service destroyed');
   }
 }
 

@@ -35,7 +35,7 @@ async function main() {
     });
 
     fs.writeFileSync('invoice.pdf', pdfBuffer);
-    console.log('📄 Invoice saved to invoice.pdf');
+    console.log('Invoice saved to invoice.pdf');
   } finally {
     await renderer.destroy();
   }

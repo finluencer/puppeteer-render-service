@@ -58,18 +58,18 @@ app.get('/health', (req, res) => {
 const PORT = process.env.PORT || 3000;
 
 const server = app.listen(PORT, () => {
-  console.log(`🚀 Render service running on http://localhost:${PORT}`);
-  console.log(`   POST /render  - Render HTML to PDF/Image`);
-  console.log(`   GET  /stats   - Service statistics`);
-  console.log(`   GET  /health  - Health check`);
+  console.log(`Render service running on http://localhost:${PORT}`);
+  console.log(`POST /render  - Render HTML to PDF/Image`);
+  console.log(`GET  /stats   - Service statistics`);
+  console.log(`GET  /health  - Health check`);
 });
 
 // Graceful shutdown
 async function shutdown() {
-  console.log('\n🛑 Shutting down...');
+  console.log('\nShutting down...');
   server.close();
   await renderer.destroy();
-  console.log('👋 Done');
+  console.log('Done');
   process.exit(0);
 }
 
