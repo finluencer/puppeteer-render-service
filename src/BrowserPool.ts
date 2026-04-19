@@ -21,6 +21,7 @@ export interface BrowserHandle {
 
 interface WaitQueueItem {
   resolve(handle: BrowserHandle): void;
+  reject(error: Error): void;
 }
 
 interface Logger {
@@ -31,6 +32,7 @@ interface Logger {
 
 export interface BrowserPoolOptions extends Partial<PoolDefaults> {
   logger?: Logger;
+  maxWaitQueue?: number;
 }
 
 export class BrowserPool {
@@ -40,6 +42,7 @@ export class BrowserPool {
   acquireTimeout: number;
   maxUsesPerBrowser: number;
   healthCheckInterval: number;
+  maxWaitQueue: number;
   pool: PoolItem[];
   waitQueue: WaitQueueItem[];
   isInitialized: boolean;
@@ -55,6 +58,7 @@ export class BrowserPool {
     this.acquireTimeout = config.acquireTimeout;
     this.maxUsesPerBrowser = config.maxUsesPerBrowser;
     this.healthCheckInterval = config.healthCheckInterval;
+    this.maxWaitQueue = options.maxWaitQueue ?? 100;
 
     this.pool = [];
     this.waitQueue = [];
@@ -96,7 +100,7 @@ export class BrowserPool {
       await this.initialize();
     }
 
-    // Find available browser
+    // Find available connected browser
     for (const item of this.pool) {
       if (!item.inUse && item.browser.isConnected()) {
         item.inUse = true;
@@ -117,20 +121,39 @@ export class BrowserPool {
       }
     }
 
+    // Reject immediately if wait queue is full
+    if (this.waitQueue.length >= this.maxWaitQueue) {
+      throw new BrowserPoolError(
+        `Wait queue is full (${this.maxWaitQueue} pending requests) — all browsers busy`
+      );
+    }
+
     // Wait for an available browser
     return new Promise<BrowserHandle>((resolve, reject) => {
+      let settled = false;
+
+      const wrappedResolve = (handle: BrowserHandle) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        resolve(handle);
+      };
+
+      const wrappedReject = (error: Error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        reject(error);
+      };
+
+      // Declare timeout after wrapped handlers so the reference is captured correctly
       const timeout = setTimeout(() => {
         const idx = this.waitQueue.findIndex((w) => w.resolve === wrappedResolve);
         if (idx !== -1) this.waitQueue.splice(idx, 1);
-        reject(new BrowserPoolError(`Acquire timeout after ${this.acquireTimeout}ms - all browsers busy`));
+        wrappedReject(new BrowserPoolError(`Acquire timeout after ${this.acquireTimeout}ms — all browsers busy`));
       }, this.acquireTimeout);
 
-      const wrappedResolve = (item: BrowserHandle) => {
-        clearTimeout(timeout);
-        resolve(item);
-      };
-
-      this.waitQueue.push({ resolve: wrappedResolve });
+      this.waitQueue.push({ resolve: wrappedResolve, reject: wrappedReject });
     });
   }
 
@@ -138,7 +161,13 @@ export class BrowserPool {
     if (!item) return;
     item.inUse = false;
 
-    // Recycle if too many uses
+    // Recycle if browser crashed while in-use
+    if (!item.browser.isConnected()) {
+      this._recycleBrowser(item);
+      return;
+    }
+
+    // Recycle if reached max use count
     if (item.useCount >= this.maxUsesPerBrowser) {
       this._recycleBrowser(item);
       return;
@@ -170,17 +199,29 @@ export class BrowserPool {
       // ignore close errors
     }
 
-    // Replace in background
-    this.launchFn()
-      .then((browser) => {
+    if (this.isShuttingDown) return;
+
+    // Replace with exponential backoff retry (1s → 2s → 4s)
+    const launch = async (attemptsLeft: number): Promise<void> => {
+      if (this.isShuttingDown) return;
+      try {
+        const browser = await this.launchFn();
         this.pool.push({ browser, inUse: false, created: Date.now(), useCount: 0 });
         this._drainWaitQueue();
-      })
-      .catch((err: Error) => {
+      } catch (err) {
         if (this.logger.warn) {
-          this.logger.warn('[BrowserPool] Recycle launch failed:', err.message);
+          this.logger.warn('[BrowserPool] Recycle launch failed:', (err as Error).message);
         }
-      });
+        if (attemptsLeft > 0) {
+          const delay = 1000 * Math.pow(2, 3 - attemptsLeft);
+          setTimeout(() => launch(attemptsLeft - 1), delay);
+        } else if (this.logger.error) {
+          this.logger.error('[BrowserPool] Recycle failed after all retries — pool may be undersized');
+        }
+      }
+    };
+
+    launch(3);
   }
 
   _drainWaitQueue(): void {
@@ -196,22 +237,29 @@ export class BrowserPool {
   }
 
   async healthCheck(): Promise<void> {
-    // Remove disconnected browsers
-    this.pool = this.pool.filter((item) => item.browser.isConnected());
+    // Remove idle disconnected browsers
+    const idleDisconnected = this.pool.filter((item) => !item.inUse && !item.browser.isConnected());
+    for (const item of idleDisconnected) {
+      const idx = this.pool.indexOf(item);
+      if (idx !== -1) this.pool.splice(idx, 1);
+      try { await item.browser.close(); } catch { /* ignore */ }
+    }
 
     // Ensure minimum pool size
-    const available = this.pool.filter((p) => !p.inUse).length;
-    if (available < this.minSize) {
+    const needed = this.minSize - this.pool.length;
+    for (let i = 0; i < needed; i++) {
       try {
         const browser = await this.launchFn();
         this.pool.push({ browser, inUse: false, created: Date.now(), useCount: 0 });
-        this._drainWaitQueue();
       } catch (error) {
         if (this.logger.warn) {
           this.logger.warn('[BrowserPool] Health check launch failed:', (error as Error).message);
         }
+        break;
       }
     }
+
+    if (needed > 0) this._drainWaitQueue();
   }
 
   getStats() {
@@ -231,7 +279,11 @@ export class BrowserPool {
       this.healthCheckTimer = null;
     }
 
-    this.waitQueue = [];
+    // Reject all pending waiters so their promises don't hang forever
+    const pending = this.waitQueue.splice(0);
+    for (const waiter of pending) {
+      waiter.reject(new BrowserPoolError('Pool is being destroyed'));
+    }
 
     const closePromises = this.pool.map(async (item) => {
       try {

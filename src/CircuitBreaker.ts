@@ -47,7 +47,10 @@ export class CircuitBreaker {
   }
 
   recordSuccess(): void {
-    this.successCount++;
+    // Cap to avoid overflow on long-lived instances
+    if (this.successCount < Number.MAX_SAFE_INTEGER) {
+      this.successCount++;
+    }
     if (this.failures > 0) {
       this.failures = Math.max(0, this.failures - 1);
     }
@@ -84,6 +87,7 @@ export class CircuitBreaker {
     this.failures = 0;
     this.isOpen = false;
     this.lastFailureTime = null;
+    this.successCount = 0;
   }
 
   getState(): CircuitBreakerState {

@@ -27,6 +27,7 @@ export class ImageCache {
   store: Map<string, CacheEntry>;
   hits: number;
   misses: number;
+  private cleanupTimer: ReturnType<typeof setInterval> | null;
 
   constructor(options: Partial<CacheDefaults> = {}) {
     const config = { ...DEFAULTS.cache, ...options };
@@ -38,6 +39,15 @@ export class ImageCache {
     this.store = new Map();
     this.hits = 0;
     this.misses = 0;
+    this.cleanupTimer = null;
+
+    if (this.enabled) {
+      // Run cleanup at 1/4 of TTL, but no more often than every 60s
+      const cleanupInterval = Math.max(this.ttl / 4, 60_000);
+      this.cleanupTimer = setInterval(() => this.cleanup(), cleanupInterval);
+      // Don't block process exit
+      if (this.cleanupTimer.unref) this.cleanupTimer.unref();
+    }
   }
 
   static generateKey(url: string, namespace = 'default'): string {
@@ -89,11 +99,12 @@ export class ImageCache {
     }
 
     const entries = Array.from(this.store.entries());
-    const sorted = entries.sort((a, b) => a[1].lastAccessed - b[1].lastAccessed);
-    const toEvict = sorted.slice(0, Math.ceil(this.store.size * this.evictionPercent));
+    // Sort by LRU: least recently accessed first
+    entries.sort((a, b) => a[1].lastAccessed - b[1].lastAccessed);
+    const toEvict = Math.ceil(this.store.size * this.evictionPercent);
 
-    for (const [key] of toEvict) {
-      this.store.delete(key);
+    for (let i = 0; i < toEvict && i < entries.length; i++) {
+      this.store.delete(entries[i][0]);
     }
   }
 
@@ -125,6 +136,13 @@ export class ImageCache {
       if (now - value.timestamp > this.ttl) {
         this.store.delete(key);
       }
+    }
+  }
+
+  stopCleanup(): void {
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer);
+      this.cleanupTimer = null;
     }
   }
 

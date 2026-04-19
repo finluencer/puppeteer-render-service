@@ -66,6 +66,7 @@ Creates and returns a new `RenderService` instance.
 | `pool.acquireTimeout` | number | `15000` | Max wait to acquire browser (ms) |
 | `pool.maxUsesPerBrowser` | number | `500` | Recycle browser after N uses |
 | `pool.healthCheckInterval` | number | `300000` | Health check interval (ms) |
+| `pool.maxWaitQueue` | number | `100` | Max requests that can queue for a browser before rejecting immediately |
 | `browser.headless` | boolean | `true` | Run browser headless |
 | `browser.timeout` | number | `10000` | Browser launch timeout (ms) |
 | `browser.args` | string[] | see defaults | Chrome launch flags |
@@ -140,6 +141,8 @@ const stats = renderer.getStats();
 ```ts
 await renderer.destroy();
 ```
+
+Calling `destroy()` closes all pooled browsers, stops the health-check timer, stops the image-cache cleanup timer, rejects any queued acquire requests, and removes all event listeners. Always call it before process exit.
 
 ---
 

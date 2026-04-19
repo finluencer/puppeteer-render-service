@@ -192,7 +192,7 @@ export class RenderService extends EventEmitter {
         args: this.config.browser.args,
         timeout: this.config.browser.timeout,
       });
-    } catch (error) {
+    } catch {
       if (this.logger.warn) {
         this.logger.warn('[RenderService] Primary launch failed, trying minimal config');
       }
@@ -209,17 +209,21 @@ export class RenderService extends EventEmitter {
     await page.setRequestInterception(true);
 
     page.on('request', (request: RequestLike) => {
-      if (options.requestFilter) {
-        const action = options.requestFilter(request);
-        if (action === 'abort') return request.abort();
-        if (action === 'continue') return request.continue();
-      }
+      try {
+        if (options.requestFilter) {
+          const action = options.requestFilter(request);
+          if (action === 'abort') { void request.abort(); return; }
+          if (action === 'continue') { void request.continue(); return; }
+        }
 
-      const type = request.resourceType();
-      if (['document', 'stylesheet', 'font', 'image'].includes(type)) {
-        request.continue();
-      } else {
-        request.abort();
+        const type = request.resourceType();
+        if (['document', 'stylesheet', 'font', 'image'].includes(type)) {
+          void request.continue();
+        } else {
+          void request.abort();
+        }
+      } catch {
+        // Page may be closing; ignore stale request handler errors
       }
     });
 
@@ -417,10 +421,10 @@ export class RenderService extends EventEmitter {
     }
     if (buffer.length === 0) throw new ValidationError(`Empty ${type} buffer`);
 
-    const minSize = type === 'pdf' ? 1000 : 100;
+    const minSize = type === 'pdf' ? 100 : 50;
     if (buffer.length < minSize) {
       throw new ValidationError(
-        `${type} buffer too small (${buffer.length} bytes) - possibly corrupted`
+        `${type} buffer too small (${buffer.length} bytes) — possibly corrupted`
       );
     }
   }
@@ -456,7 +460,7 @@ export class RenderService extends EventEmitter {
     this.isDestroyed = true;
 
     if (this.imagePreprocessor) {
-      this.imagePreprocessor.reset();
+      this.imagePreprocessor.destroy();
     }
 
     await this.browserPool.destroy();

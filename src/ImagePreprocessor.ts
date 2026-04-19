@@ -63,7 +63,6 @@ export class ImagePreprocessor {
     }
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const nodeFetch = require('node-fetch') as FetchFn;
       this.fetchFn = nodeFetch;
       return this.fetchFn;
@@ -78,10 +77,10 @@ export class ImagePreprocessor {
     const fetch = await this._getFetch();
 
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), this.downloadTimeout);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), this.downloadTimeout);
 
+      try {
         const response = await fetch(url, {
           signal: controller.signal,
           headers: {
@@ -106,6 +105,9 @@ export class ImagePreprocessor {
         const contentType = response.headers.get('content-type') || 'image/png';
         return `data:${contentType};base64,${buffer.toString('base64')}`;
       } catch (error) {
+        // Always clear timeout — prevents orphaned AbortController on retry
+        clearTimeout(timeoutId);
+
         if (attempt === this.maxRetries) throw error;
         await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
       }
@@ -123,12 +125,30 @@ export class ImagePreprocessor {
     try {
       const data = await this.circuitBreaker.execute(
         () => this.downloadAsBase64(url),
-        () => url
+        () => {
+          // Circuit is open — log and degrade gracefully
+          if (this.logger.warn) {
+            this.logger.warn(
+              `[ImagePreprocessor] Circuit open, skipping inline for "${url}" — using original URL`
+            );
+          }
+          return url;
+        }
       );
 
-      this.cache.set(cacheKey, data);
+      // Only cache if we actually downloaded (not the fallback URL)
+      if (data !== url) {
+        this.cache.set(cacheKey, data);
+      }
+
       return data;
-    } catch {
+    } catch (error) {
+      if (this.logger.warn) {
+        this.logger.warn(
+          `[ImagePreprocessor] Failed to download "${url}", using original URL:`,
+          (error as Error).message
+        );
+      }
       return url;
     }
   }
@@ -184,6 +204,11 @@ export class ImagePreprocessor {
 
   reset(): void {
     this.cache.clear();
+    this.circuitBreaker.reset();
+  }
+
+  destroy(): void {
+    this.cache.stopCleanup();
     this.circuitBreaker.reset();
   }
 }

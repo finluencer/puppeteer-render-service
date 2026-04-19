@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "engines": {
-    "node": ">=16.0.0"
+    "node": ">=18.0.0"
   },
   "scripts": {
     "build": "tsc",
@@ -24,7 +24,7 @@
     "browser-pool",
     "circuit-breaker"
   ],
-  "author": "",
+  "author": "Finluencer <finluencer@gmail.com>",
   "license": "MIT",
   "peerDependencies": {
     "puppeteer": ">=19.0.0"
@@ -47,6 +47,6 @@
   ],
   "repository": {
     "type": "git",
-    "url": ""
+    "url": "https://github.com/finluencer/puppeteer-render-service"
   }
 }
